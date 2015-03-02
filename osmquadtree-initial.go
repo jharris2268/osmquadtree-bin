@@ -33,7 +33,7 @@ func main() {
     eds   := flag.String("e", "", "timestamp")
     initialState  := flag.Int("s",0,"initial state")
     sourcePrfx    := flag.String("sourceprfx", defaultSource, "source (defaults to "+defaultSource+")")
-	diffsLocation := flag.String("diffslocation", "diffs/", "diffs location: where osc.gz files are saved")
+	diffsLocation := flag.String("diffslocation", "", "diffs location: where osc.gz files are saved")
 	roundTime     := flag.Bool("roundtime", false, "round timestamp up to nearest day")
     
     flag.Parse()
@@ -71,11 +71,15 @@ func main() {
     if err!=nil {
         panic(err.Error())
     }
-    fmt.Printf("took %8.1fs", time.Since(st).Seconds())
+    fmt.Printf("took %8.1fs\n", time.Since(st).Seconds())
     
     us := UpdateSettings{}
     us.SourcePrfx = *sourcePrfx
-    us.DiffsLocation = *diffsLocation
+    if *diffsLocation != "" {
+        us.DiffsLocation = *diffsLocation
+    } else {
+        us.DiffsLocation = *prfx + "diffs/"
+    }
     us.InitialState = int64(*initialState)
     us.RoundTime = *roundTime
     

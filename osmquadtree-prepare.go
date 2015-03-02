@@ -28,6 +28,7 @@ func main() {
     onlyCalcQts     := flag.Bool("onlycalcqts", false, "only calc qts")
     onlyCalcGroups  := flag.Bool("onlycalcgroups", false, "only calc groups")
     writeQtTree     := flag.Bool("writeqttree", false, "write qt tree to file")
+    inMem           := flag.Bool("inmem", false, "sort objs in memory")
     
     flag.Parse()
     
@@ -184,7 +185,12 @@ func main() {
         panic(err.Error())
     }
     
-    outChans, err := blocksort.SortElementsByAlloc(addQtBlocks,alloc,4,makeBlock,"tempfilesplit")
+    spt := "tempfilesplit"
+    if *inMem {
+        spt = "inmem"
+    }
+    
+    outChans, err := blocksort.SortElementsByAlloc(addQtBlocks,alloc,4,makeBlock,spt)
     if err!=nil {
         panic(err.Error())
     }
