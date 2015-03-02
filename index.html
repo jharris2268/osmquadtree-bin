@@ -1,13 +1,4 @@
-
-package main
-
-import (
-    "net/http"
-)
-
-func returnIndex(rw http.ResponseWriter, req *http.Request) {
-    rw.Header().Set("Content-Type", "text/html")
-    rw.Write([]byte(`<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
 <head>
 	<title>osmquadtree-filter</title>
@@ -468,5 +459,3 @@ func returnIndex(rw http.ResponseWriter, req *http.Request) {
 
 
 </html>
-`))
-}
