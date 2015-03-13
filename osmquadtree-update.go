@@ -117,6 +117,7 @@ type UpdateSettings struct {
 	DiffsLocation string
 	InitialState  int64
 	RoundTime     bool
+    LocationsCache string
 }
 
 type updateSpec struct {
@@ -271,7 +272,7 @@ func main() {
 			fmt.Println("getState", err.Error())
 			os.Exit(1)
 		}
-		lastState,err := locationscache.GetLastState(outputPrfx)
+		lastState,err := locationscache.GetLastState(outputPrfx,settings.LocationsCache)
         if err!=nil { 
             fmt.Println("locationscache.GetLastState", err.Error())
 			os.Exit(1)
@@ -333,7 +334,7 @@ func main() {
 		}
 
 		log.Printf("call CalcUpdateTiles(%q, %q, %d, %q, %d)", outputPrfx, o.srcFile, o.timestamp, zz, o.state)
-		blcks,qts, err := update.CalcUpdateTiles(outputPrfx, o.srcFile, o.timestamp, zz, o.state)
+		blcks,qts, err := update.CalcUpdateTiles(outputPrfx, o.srcFile, o.timestamp, zz, o.state,settings.LocationsCache)
 		if err != nil {
 			fmt.Println("CalcUpdateTiles", err.Error())
 			os.Exit(1)

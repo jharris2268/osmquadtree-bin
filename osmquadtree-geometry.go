@@ -29,6 +29,7 @@ import (
     "github.com/jharris2268/osmquadtree/write"
     "github.com/jharris2268/osmquadtree/geojson"
     "github.com/jharris2268/osmquadtree/sqlselect"
+    "github.com/jharris2268/osmquadtree/writefile"
     
     "github.com/jharris2268/osmquadtree/packeddatastore"
     
@@ -474,6 +475,8 @@ func main() {
     queriesfn:= flag.String("queries",/*"/home/james/map_data/openstreetmap/openstreetmap-carto/project-pyds.mml"*/"","queriesfn")
     commonstrings:= flag.String("commonstrings","","common strings")
     //stats := flag.Bool("stats", false, "show stats")
+    outFile := flag.String("o", "", "output file")
+    
     
     flag.Parse()
     
@@ -592,6 +595,12 @@ func main() {
     
     
     geometries,err := geometry.GenerateGeometries(makeInChan, fbx, tagsFilter, true, true)
+    if err!=nil { panic(err.Error())}
+    if *outFile != "" {
+        _,err = writefile.WritePbfFile(geometries, *outFile, true,false,false)
+        if err!=nil { panic(err.Error())}
+        return;
+    }
     
     for b := range geometryProgress(geometries,1273) {
         dataStore.AddBlock(b)

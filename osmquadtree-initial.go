@@ -37,6 +37,7 @@ type UpdateSettings struct {
 	DiffsLocation string
 	InitialState  int64
 	RoundTime     bool
+    LocationsCache string
 }
     
 const defaultSource = string("http://planet.openstreetmap.org/replication/day/")
@@ -52,6 +53,7 @@ func main() {
     sourcePrfx    := flag.String("sourceprfx", defaultSource, "source (defaults to "+defaultSource+")")
 	diffsLocation := flag.String("diffslocation", "", "diffs location: where osc.gz files are saved")
 	roundTime     := flag.Bool("roundtime", false, "round timestamp up to nearest day")
+    lctype        := flag.String("l", "leveldb", "location cache type")
     
     flag.Parse()
     
@@ -78,12 +80,12 @@ func main() {
     fn:=*prfx+infn
     fmt.Println("import",fn)
     
-    df, err := readfile.ReadExtendedBlockMulti(*prfx+infn,4)
+    df, err := readfile.ReadQtsMulti(*prfx+infn,4)
     if err!=nil {
         panic(err.Error())
     }
     
-    err = locationscache.MakeLocationsCache(df,infn,*prfx,int64(endDate),int64(*initialState))
+    err = locationscache.MakeLocationsCache(df,*lctype,infn,*prfx,endDate,int64(*initialState))
     
     if err!=nil {
         panic(err.Error())
@@ -100,6 +102,7 @@ func main() {
     us.InitialState = int64(*initialState)
     us.RoundTime = *roundTime
     
+    us.LocationsCache = *lctype
     settingsf, err := os.Create(*prfx+"settings.json")
     if err!=nil { panic(err.Error()) }
     defer settingsf.Close()
