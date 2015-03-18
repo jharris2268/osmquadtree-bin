@@ -32,11 +32,59 @@ import (
     "runtime/debug"
     "time"
     "flag"
+    "os/signal"
+    "syscall"
 )
+
+func onTerm(c os.Signal) {
+    fmt.Println("TERM", c)
+    buf := make([]byte, 1<<16)
+    z:=runtime.Stack(buf, true)
+    fmt.Println(string(buf[:z]))
+}
+
+
+func progress(inc <-chan elements.ExtendedBlock, nb int, suf string) chan elements.ExtendedBlock {
+    //incc := inc
+    outc := make(chan elements.ExtendedBlock)
+    
+    go func() {
+        //println("progress called",suf)
+        cc:=0
+        nc:=0
+        st:=time.Now()
+        mm:=""
+        
+        for bl := range inc {
+            
+            mm = fmt.Sprintf("\r%s%8.1fs %6d: %8d %s",suf,time.Since(st).Seconds(),bl.Idx(),cc,bl)
+            cc += bl.Len()
+            //println(mm)
+            if cc > nc {
+                fmt.Printf("%s %s",mm,utils.MemstatsStr())
+                mm=""
+                nc += nb
+            }
+            outc <- bl
+        }
+        fmt.Println(mm)
+        close(outc)
+    }()
+    return outc
+}
 
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU()*2)
-    
+        
+    c := make(chan os.Signal, 1)
+    signal.Notify(c, os.Interrupt)
+    signal.Notify(c, syscall.SIGTERM)
+    go func() {
+        z := <-c
+        onTerm(z)
+        os.Exit(1)
+    }()
+        
     
     infn  := flag.String("i","planet-latest.osm.pbf","input pbf file")
     prfx  := flag.String("p","planet/", "prefix")
@@ -207,16 +255,28 @@ func main() {
         spt = "inmem"
     }
     
-    outChans, err := blocksort.SortElementsByAlloc(addQtBlocks,alloc,4,makeBlock,spt)
+    nqb:=make([]chan elements.ExtendedBlock, 4)
+    
+    for i,q:=range addQtBlocks {
+        if i==0 {
+            nqb[i] = progress(q,511*8000/4,"read ")
+        } else {
+            nqb[i] = q
+        }
+    }
+    
+    
+    
+    outChans, err := blocksort.SortElementsByAlloc(/*addQtBlocks*/nqb,alloc,4,makeBlock,spt)
     if err!=nil {
         panic(err.Error())
     }
         
-    fmt.Println("sort and write to ",outfn)
-    sorted := readfile.CollectExtendedBlockChans(outChans,false)
+    //fmt.Println("sort and write to ",outfn)
+    //sorted := readfile.CollectExtendedBlockChans(outChans,false)
     
     st:=time.Now()
-    _,err = writefile.WritePbfFile(sorted,outfn,true,false,false)
+    _,err = writefile.WritePbfFileM(outChans,outfn,false)
     if err!=nil {
         panic(err.Error())
     }

@@ -484,37 +484,55 @@ func main() {
         panic("must specify file prefix")
     }
     
-    
+    var err error
     endDate := elements.Timestamp(0)
     if (*endstr)!="" {
-        var err error
+        
         endDate,err = elements.ReadDateString(*endstr)
         if err!=nil {
              panic(err.Error())
         }
     }
     
+    origfn := *prfx
+    chgfns := []string{}
+    qq := []quadtree.Quadtree{}
     
-    ii,qq,err := locationscache.GetCacheSpecs(*prfx)        
-    if err!=nil {
-        panic(err.Error())
-    }
+    if !strings.HasSuffix(*prfx, "pbf") {
     
-    origfn := *prfx+ii[0].Filename
-    
-    chgfns := make([]string,0,len(ii)-1)
-    if len(ii)>1 {
-        for _,i := range ii[1:] {
-            chgfns = append(chgfns,*prfx+i.Filename)
-            if (endDate!=0) && (i.Timestamp >= endDate) {
-                break
+        settings,err := locationscache.GetUpdateSettings(*prfx)
+        if err!=nil {
+            panic(err.Error())
+        }
+        var ii []locationscache.IdxItem
+        ii,qq,err = locationscache.GetCacheSpecs(*prfx,settings.LocationsCache)        
+        if err!=nil {
+            panic(err.Error())
+        }
+        
+        origfn = *prfx+ii[0].Filename
+        
+        chgfns = make([]string,0,len(ii)-1)
+        if len(ii)>1 {
+            for _,i := range ii[1:] {
+                chgfns = append(chgfns,*prfx+i.Filename)
+                if (endDate!=0) && (i.Timestamp >= endDate) {
+                    break
+                }
+            }
+            if len(chgfns) > 0 {
+                fmt.Printf("origfn:%s, %d changes [%s=>%s]\n",origfn, len(chgfns), chgfns[0], chgfns[len(chgfns)-1])
             }
         }
-        if len(chgfns) > 0 {
-            fmt.Printf("origfn:%s, %d changes [%s=>%s]\n",origfn, len(chgfns), chgfns[0], chgfns[len(chgfns)-1])
+    } else {
+        _,hh,err := readfile.GetHeaderBlock(origfn)
+        if err!=nil { panic(err.Error()) }
+        qq = make([]quadtree.Quadtree,hh.Index.Len())
+        for i,_:=range qq {
+            qq[i] = hh.Index.Quadtree(i)
         }
     }
-    
+        
     
     if *commonstrings != "" {    
         sf,err:=os.Open("planet-strings.json")
@@ -642,7 +660,7 @@ func main() {
     spec[1] = tableSpec{"planet_osm_line",geometry.Linestring,lnc,nil}
     spec[2] = tableSpec{"planet_osm_polygon",geometry.Polygon,pyc,nil}
     
-    rdq,err := sqlselect.Parse("SELECT osm_id,name,ref,admin_level,highway,railway,boundary, service,tunnel,bridge,z_order, way FROM planet_osm_line WHERE highway in ( 'secondary','secondary_link','primary','primary_link', 'trunk','trunk_link','motorway','motorway_link') OR railway is not null or boundary = 'administrative' UNION SELECT osm_id,name,null as ref,admin_level,null as highway, null as railway, boundary, null as service, null as tunnel,null as bridge, 0 as z_order,way FROM planet_osm_polygon WHERE osm_id<0 and boundary='administrative'")
+    rdq,err := sqlselect.Parse("SELECT osm_id,name,ref,admin_level,highway,railway,boundary, service,tunnel,bridge,covered,z_order, way FROM planet_osm_line WHERE highway in ( 'secondary','secondary_link','primary','primary_link', 'trunk','trunk_link','motorway','motorway_link') OR railway is not null or boundary = 'administrative' UNION SELECT osm_id,name,null as ref,admin_level,null as highway, null as railway, boundary, null as service, null as tunnel,null as bridge, 0 as z_order,way FROM planet_osm_polygon WHERE osm_id<0 and boundary='administrative'")
     if err!=nil { panic(err.Error()) }
     
     

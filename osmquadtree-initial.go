@@ -27,20 +27,10 @@ import (
     "strings"
     "flag"
     "fmt"
-    "encoding/json"
-    "os"
 )
 
 
-type UpdateSettings struct {
-	SourcePrfx    string
-	DiffsLocation string
-	InitialState  int64
-	RoundTime     bool
-    LocationsCache string
-}
-    
-const defaultSource = string("http://planet.openstreetmap.org/replication/day/")
+
 
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU()*2)
@@ -50,7 +40,7 @@ func main() {
     prfx  := flag.String("p","planet/", "prefix")
     eds   := flag.String("e", "", "timestamp")
     initialState  := flag.Int("s",0,"initial state")
-    sourcePrfx    := flag.String("sourceprfx", defaultSource, "source (defaults to "+defaultSource+")")
+    sourcePrfx    := flag.String("sourceprfx", locationscache.DefaultSource, "source (defaults to "+locationscache.DefaultSource+")")
 	diffsLocation := flag.String("diffslocation", "", "diffs location: where osc.gz files are saved")
 	roundTime     := flag.Bool("roundtime", false, "round timestamp up to nearest day")
     lctype        := flag.String("l", "leveldb", "location cache type")
@@ -92,7 +82,7 @@ func main() {
     }
     fmt.Printf("took %8.1fs\n", time.Since(st).Seconds())
     
-    us := UpdateSettings{}
+    us := locationscache.UpdateSettings{}
     us.SourcePrfx = *sourcePrfx
     if *diffsLocation != "" {
         us.DiffsLocation = *diffsLocation
@@ -103,11 +93,8 @@ func main() {
     us.RoundTime = *roundTime
     
     us.LocationsCache = *lctype
-    settingsf, err := os.Create(*prfx+"settings.json")
-    if err!=nil { panic(err.Error()) }
-    defer settingsf.Close()
-    err = json.NewEncoder(settingsf).Encode(us)
-    if err!=nil { panic(err.Error()) }
     
+    err = locationscache.WriteUpdateSettings(*prfx,us)
+    if err!=nil { panic(err.Error()) }
 }
     

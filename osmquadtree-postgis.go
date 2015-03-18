@@ -360,7 +360,7 @@ func insertCopyBlock(outc chan<- queryPair, spec map[string]copyPair, block elem
 
 var roads_stmt = `CREATE TABLE %s_roads AS
     SELECT osm_id,name,ref,admin_level,highway,railway,boundary,
-            service,tunnel,bridge,z_order, way
+            service,tunnel,bridge,z_order,covered, way
         FROM %s_line
         WHERE highway in (
             'secondary','secondary_link','primary','primary_link',
@@ -597,8 +597,13 @@ func main() {
             qq[i] = idx.Index.Quadtree(i)
         }
     } else {
+        settings,err := locationscache.GetUpdateSettings(*prfx)
+        if err!=nil {
+            panic(err.Error())
+        }        
+        
         var ii []locationscache.IdxItem
-        ii,qq,err = locationscache.GetCacheSpecs(*prfx)        
+        ii,qq,err = locationscache.GetCacheSpecs(*prfx,settings.LocationsCache)        
         if err!=nil {
             panic(err.Error())
         }

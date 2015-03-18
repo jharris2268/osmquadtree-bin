@@ -27,7 +27,7 @@ import (
 
     "bufio"
 	"bytes"
-    "encoding/json"
+    
     "errors"
 	"flag"
 	"fmt"
@@ -112,13 +112,6 @@ func getStateFile(rt string) (int64, elements.Timestamp, error) {
 }
 
 
-type UpdateSettings struct {
-	SourcePrfx    string
-	DiffsLocation string
-	InitialState  int64
-	RoundTime     bool
-    LocationsCache string
-}
 
 type updateSpec struct {
 	srcFile   string
@@ -208,8 +201,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	settings := UpdateSettings{}
-	sfn, err := os.Open(outputPrfx + "settings.json")
+	
+	settings, err := locationscache.GetUpdateSettings(outputPrfx)
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Println("settings file doesn't exist: rely on specified flags")
@@ -217,19 +210,7 @@ func main() {
 			fmt.Println("open settings.json", err.Error())
 			os.Exit(1)
 		}
-	} else {
-		sff, err := ioutil.ReadAll(sfn)
-		if err != nil {
-			fmt.Println("read settings.json", err.Error())
-			os.Exit(1)
-		}
-		err = json.Unmarshal(sff, &settings)
-		if err != nil {
-			fmt.Println("unmarshal settings.json", err.Error())
-			os.Exit(1)
-		}
 	}
-
     roundTime := (settings.RoundTime || *roundTimep)
 
 

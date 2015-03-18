@@ -386,9 +386,14 @@ func main() {
         
         
     } else {
+        settings,err := locationscache.GetUpdateSettings(*prfx)
+        if err!=nil {
+            panic(err.Error())
+        }
+        
         var ii []locationscache.IdxItem
-        var err error
-        ii,qq,err = locationscache.GetCacheSpecs(*prfx)        
+        //var err error
+        ii,qq,err = locationscache.GetCacheSpecs(*prfx,settings.LocationsCache)        
         if err!=nil {
             panic(err.Error())
         }
