@@ -43,7 +43,7 @@ func main() {
     sourcePrfx    := flag.String("sourceprfx", locationscache.DefaultSource, "source (defaults to "+locationscache.DefaultSource+")")
 	diffsLocation := flag.String("diffslocation", "", "diffs location: where osc.gz files are saved")
 	roundTime     := flag.Bool("roundtime", false, "round timestamp up to nearest day")
-    lctype        := flag.String("l", "leveldb", "location cache type")
+    lctype        := flag.String("l", "pbf", "location cache type")
     
     flag.Parse()
     
