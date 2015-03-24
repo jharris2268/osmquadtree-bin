@@ -55,7 +55,7 @@ func main() {
     infn := *infnn
     
     if infn == "" {
-        infn = *eds+".pbf"
+        infn = endDate.FileString(*roundTime)+".pbf"
     } else if strings.HasPrefix(infn, *prfx) {
         infn = strings.Replace(infn, *prfx, "", 1)
     }

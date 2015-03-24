@@ -368,13 +368,13 @@ var roads_stmt = `CREATE TABLE %s_roads AS
         OR railway is not null or boundary = 'administrative'
     UNION SELECT osm_id,name,null as ref,admin_level,null as highway, 
             null as railway, boundary, null as service,
-            null as tunnel,null as bridge, 0  as z_order,
+            null as tunnel,null as bridge, 0  as z_order,null as covered,
             exteriorring(st_geometryn(way,generate_series(1,st_numgeometries(way)))) as way
         FROM %s_polygon WHERE
             osm_id<0 and boundary='administrative' and geometrytype(way)!='POLYGON'
     UNION SELECT osm_id,name,null as ref, admin_level,null as highway,
             null as railway, boundary, null as service,
-            null as tunnel,null as bridge, 0  as z_order,
+            null as tunnel,null as bridge, 0  as z_order,null as covered,
             exteriorring(way) as way
         FROM %s_polygon WHERE
             osm_id<0 and boundary='administrative' and geometrytype(way)='POLYGON'`

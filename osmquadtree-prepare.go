@@ -32,16 +32,9 @@ import (
     "runtime/debug"
     "time"
     "flag"
-    "os/signal"
-    "syscall"
+    
 )
 
-func onTerm(c os.Signal) {
-    fmt.Println("TERM", c)
-    buf := make([]byte, 1<<16)
-    z:=runtime.Stack(buf, true)
-    fmt.Println(string(buf[:z]))
-}
 
 
 func progress(inc <-chan elements.ExtendedBlock, nb int, suf string) chan elements.ExtendedBlock {
@@ -76,14 +69,7 @@ func progress(inc <-chan elements.ExtendedBlock, nb int, suf string) chan elemen
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU()*2)
         
-    c := make(chan os.Signal, 1)
-    signal.Notify(c, os.Interrupt)
-    signal.Notify(c, syscall.SIGTERM)
-    go func() {
-        z := <-c
-        onTerm(z)
-        os.Exit(1)
-    }()
+    utils.OnTerm()
         
     
     infn  := flag.String("i","planet-latest.osm.pbf","input pbf file")
@@ -120,8 +106,10 @@ func main() {
         panic(err.Error())
     }
     
-    qtfn  := *prfx + endstr+"-qts.pbf"
-    outfn := *prfx + endstr+".pbf"
+    filestr := endDate.FileString(endDate % (24*60*60) == 0)
+        
+    qtfn  := *prfx + filestr+"-qts.pbf"
+    outfn := *prfx + filestr+".pbf"
 
     fmt.Println(*infn,*prfx,*eds,"=>",endDate,qtfn,outfn)
 

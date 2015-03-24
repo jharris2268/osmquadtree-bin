@@ -132,10 +132,7 @@ func (o updateSpec) String() string {
 }
 
 func makeOutFilename(prfx string, ts elements.Timestamp, rt bool) string {
-    tss := ts.String()
-    if rt {
-        tss = ts.DateString()
-    }
+    tss := ts.FileString(rt)
     return fmt.Sprintf("%s%s.pbfc", prfx, tss)
     
 }
