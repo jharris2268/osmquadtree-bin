@@ -32,7 +32,6 @@ import (
     "runtime/debug"
     "time"
     "flag"
-    
 )
 
 
@@ -80,7 +79,7 @@ func main() {
     onlyCalcGroups  := flag.Bool("onlycalcgroups", false, "only calc groups")
     writeQtTree     := flag.Bool("writeqttree", false, "write qt tree to file")
     inMem           := flag.Bool("inmem", false, "sort objs in memory")
-    
+    writeGroups     := flag.Bool("writegroups",false,"write quadtree groups to file")
     flag.Parse()
     
     endstr := *eds
@@ -149,7 +148,7 @@ func main() {
         qtt := calcqts.FindQtTree(df, 17)
         
         if *writeQtTree {
-            qtfa,_ := os.Create(*prfx+endstr+"-qts.txt")
+            qtfa,_ := os.Create(*prfx+filestr+"-qts.txt")
             i:=0
             for g:=range qtt.Iter() {
                 qtfa.WriteString(fmt.Sprintf("%6d %s\n",i,g))
@@ -162,17 +161,25 @@ func main() {
         st=time.Now()
         
         grps := calcqts.FindQtGroups(qtt, 8000)
-        
-        qtf,_ := os.Create(*prfx+endstr+"-groups.txt")
-        
+        var qtf interface {
+            WriteString(string) (int, error)
+            Close() error
+        }
+        if *writeGroups {
+            qtf,_ = os.Create(*prfx+filestr+"-groups.txt")
+            defer qtf.Close()
+        }
         qts:=make([]quadtree.Quadtree, 0, 500000)
         i:=0
         for g:=range grps.Iter() {
             qts=append(qts, g.Quadtree)
-            qtf.WriteString(fmt.Sprintf("%6d %s\n",i,g))
+            if qtf!=nil {
+                qtf.WriteString(fmt.Sprintf("%6d %s\n",i,g))
+            }
             i++
         }
-        qtf.Close()
+        
+        
         
         fmt.Printf("have %d qts...\n",len(qts))
         debug.FreeOSMemory()
