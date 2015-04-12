@@ -5,6 +5,9 @@ import (
     "io"
 )
 
+
+//HEAD
+
 var HEAD = []byte(`
 package main
 
@@ -15,9 +18,13 @@ import (
 func returnIndex(rw http.ResponseWriter, req *http.Request) {
     rw.Header().Set("Content-Type", "text/html")
     rw.Write([]byte(`)
+//end
 
+
+//TAIL
 var TAIL = []byte(`))
 }`)
+//end
 
 func main() {
     of,err := os.Create("static.go")

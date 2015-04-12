@@ -80,6 +80,11 @@ func main() {
     writeQtTree     := flag.Bool("writeqttree", false, "write qt tree to file")
     inMem           := flag.Bool("inmem", false, "sort objs in memory")
     writeGroups     := flag.Bool("writegroups",false,"write quadtree groups to file")
+
+    qtTreeMaxLevel    := flag.Int("qttreemaxlevel",17,"round qt values (default 17)")
+    target := flag.Int("target",8000,"target group size")
+    minimum := flag.Int("minimum",4000,"minimum group size")
+    
     flag.Parse()
     
     endstr := *eds
@@ -145,8 +150,10 @@ func main() {
         
         df,err := readfile.ReadQtsMulti(qtfn,4)
         if err!=nil { panic(err.Error()) }
-        qtt := calcqts.FindQtTree(df, 17)
         
+        
+        qtt := calcqts.FindQtTree(df, uint(*qtTreeMaxLevel))
+        fmt.Printf("created qttree: %d items [%s]\n", qtt.Len(), utils.MemstatsStr())
         if *writeQtTree {
             qtfa,_ := os.Create(*prfx+filestr+"-qts.txt")
             i:=0
@@ -160,7 +167,7 @@ func main() {
         t1 = time.Since(st).Seconds()
         st=time.Now()
         
-        grps := calcqts.FindQtGroups(qtt, 8000)
+        grps := calcqts.FindQtGroups(qtt, int64(*target), int64(*minimum))
         var qtf interface {
             WriteString(string) (int, error)
             Close() error
@@ -181,7 +188,7 @@ func main() {
         
         
         
-        fmt.Printf("have %d qts...\n",len(qts))
+        fmt.Printf("have %d qts [%s]\n",len(qts),utils.MemstatsStr())
         debug.FreeOSMemory()
         t2 = time.Since(st).Seconds()
         return qts
@@ -200,6 +207,8 @@ func main() {
     for i,q:=range qts{
         qtm[q]=i
     }
+    
+    fmt.Printf("created alloc quadtree: %d items [%s]\n",qtt.Len(),utils.MemstatsStr())
     
     alloc := func(e elements.Element) int {
         qt:=e.(elements.Quadtreer).Quadtree()
@@ -227,19 +236,6 @@ func main() {
     }
     
     
-    /*
-    addQt := func(addf func(int, elements.ExtendedBlock) error) error {
-        st:=time.Now()
-        addff := func(i int, bl elements.ExtendedBlock) error {
-            if (bl.Idx() % 1271)==0 {
-                fmt.Printf("%-8.1f %-6d %s %s\n", time.Since(st).Seconds(), bl.Idx(), bl,utils.MemstatsStr())
-            }
-            return addf(i,bl)
-        }
-        
-        return readfile.AddQts(*infn,qtfn,4,addff)
-    }*/
-    
     addQtBlocks, err := readfile.AddQts(*infn,qtfn,4)
     if err!=nil {
         panic(err.Error())
@@ -254,7 +250,7 @@ func main() {
     
     for i,q:=range addQtBlocks {
         if i==0 {
-            nqb[i] = progress(q,511*8000/4,"read ")
+            nqb[i] = progress(q,137*8000/4,"read ")
         } else {
             nqb[i] = q
         }

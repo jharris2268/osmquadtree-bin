@@ -318,11 +318,17 @@ func main() {
 			os.Exit(1)
 		}
 		if o.outFile == "" {
-			for range blcks {
+			for _,bl:= range blcks {
+                go func() {
+                    for range bl {
+                    }
+                }()
+                
 			}
 		} else {
             fmt.Println("updated",len(qts),"tiles")
-            idx,err := writefile.WritePbfFile(blcks,o.outFile,true,true,false)
+            //idx,err := writefile.WritePbfFile(blcks,o.outFile,true,true,false)
+            idx,err := writefile.WritePbfFileM(blcks,o.outFile,true)
             
 			
 			if err != nil {

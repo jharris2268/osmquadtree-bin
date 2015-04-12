@@ -11,4 +11,4 @@ go install -a osmquadtree-update.go
 go install -a osmquadtree-geometry.go
 go install -a osmquadtree-filter.go static.go
 go install -a osmquadtree-postgis.go
-
+go install -a osmquadtree-rebase.go

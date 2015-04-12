@@ -393,7 +393,7 @@ func (fd *filterData) process_filter_serve(responseWriter http.ResponseWriter, r
                 
         ln,err := process_filter(
             fd.srcfn,fd.chgfns,fd.endDate,
-            fd.qq, locTest, trim,merge,sort,false,responseWriter)
+            fd.qq, locTest, trim,merge,sort,!sort,responseWriter)
         
         if err!=nil {
             fmt.Printf("returning %d bytes\n", ln)

@@ -565,8 +565,8 @@ func main() {
     runtime.GOMAXPROCS(runtime.NumCPU()*2)
     
     //inpr := "/home/james/map_data/repl_diffs/british-isles/" //643.osc.gz"
-    prfx    :=flag.String("p","british-isles-dec3/","data prefix")
-    endstr  :=flag.String("e","20150121","endstr")
+    prfx    :=flag.String("p","planet/","data prefix")
+    endstr  :=flag.String("e","","endstr")
     filter  :=flag.String("f","planet","filter")
     
     stylefn :=flag.String("s","extrastyle.json","stylefn")
@@ -577,10 +577,13 @@ func main() {
     vac     :=flag.Bool("v", false, "call vacuum analyze")
     
     flag.Parse()
-    
-    endDate,err := elements.ReadDateString(*endstr)
-    if err!=nil {
-         panic(err.Error())
+    endDate:=elements.Timestamp(0)
+    var err error
+    if *endstr != "" {
+        endDate,err = elements.ReadDateString(*endstr)
+        if err!=nil {
+             panic(err.Error())
+        }
     }
     origfn := *prfx
     chgfns := []string{}
