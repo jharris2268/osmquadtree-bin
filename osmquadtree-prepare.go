@@ -263,11 +263,8 @@ func main() {
         panic(err.Error())
     }
         
-    //fmt.Println("sort and write to ",outfn)
-    //sorted := readfile.CollectExtendedBlockChans(outChans,false)
-    
     st:=time.Now()
-    _,err = writefile.WritePbfFileM(outChans,outfn,false)
+    _,err = writefile.WritePbfFile(outChans,outfn,false)
     if err!=nil {
         panic(err.Error())
     }

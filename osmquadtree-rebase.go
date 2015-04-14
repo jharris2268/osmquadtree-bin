@@ -456,201 +456,7 @@ func iterObjs(oi map[int]*objsIdx) chan elements.FullRelation {
     }()
     return res
 }
-    
-    
-    
-
-/*    
-func recalcQtsOld(inchan <-chan elements.ExtendedBlock, nc int, dropemptyrels bool) []chan elements.ExtendedBlock {
-    
-    pending := map[quadtree.Quadtree]pendingBlock{}
-    
-    finishedchan := make(chan pendingBlock)
-    outchans := make([]chan elements.ExtendedBlock, nc)
-    for i,_:=range outchans {
-        outchans[i] = make(chan elements.ExtendedBlock)
-    }
-    
-    //pendingRels := make([]elements.FullRelation, 0, 10000000)
-    pendingRels := map[int]*objsIdx{}
-    pendingRels[0] = &objsIdx{make([]byte,0,1<<20),make([]int,0,2000)}
-    relcc:=0
-    relqts := map[elements.Ref]quadtree.Quadtree{}
-    
-    ss:=sync.Mutex{}
-    
-    go func() {
-    
-        for bl := range inchan {
-            qt := bl.Quadtree()
-            findFinished(pending, qt, finishedchan)
-            
-            rr:= makePendingBlock(pending, bl, dropemptyrels)
-            ss.Lock()
-            for _,rp:=range rr {
-                r:=rp.(elements.FullRelation)
-                //pendingRels=append(pendingRels,r)
-                addObj(pendingRels,r)
-                relcc++
-                for i:=0; i < r.Len(); i++ {
-                    rf:=elements.Ref(r.MemberType(i))<<59 | r.Ref(i)
-                    relqts[rf]=quadtree.Null
-                }
-            }
-            ss.Unlock()
-        }
-        findFinished(pending, -1, finishedchan)
-        
-        close(finishedchan)
-        
-    }()
-    
-    go func() {
-        mxidx:=-1
-        cc:=0
-        for pb := range finishedchan {
-            if (cc % 173)==0 {
-                fmt.Println(cc,len(pb.nodes),len(pb.ways),relcc,len(pendingRels),len(relqts))
-            }
-            cc++
-            bl := make(elements.ByElementId, 0, len(pb.nodes)+len(pb.ways))
-            
-            
-            
-            for _,nd := range pb.nodes {
-                nq,ok := pb.nodeqts[nd.Id()]
-                if !ok || nq==quadtree.Null {
-                    nq,_ = quadtree.Calculate(quadtree.Bbox{nd.Lon(), nd.Lat(), nd.Lon()+1, nd.Lat()+1}, 0.05, 18)
-                    pb.nodeqts[nd.Id()] = nq
-                }
-                
-                
-                nd.SetQuadtree(nq)
-                bl = append(bl, nd)
-            }
-            for _,w:=range pb.ways {
-                wf:=elements.Ref(1<<59) | w.Id()
-                
-                pb.nodeqts[wf]=w.Quadtree()
-                
-                bl=append(bl,w)
-            }
-            
-            outchans[pb.idx%nc] <- elements.MakeExtendedBlock(pb.idx,bl,quadtree.Null,0,0,nil)
-            if pb.idx>mxidx {
-                mxidx=pb.idx
-            }
-            
-            ss.Lock()
-            for i,q:=range pb.nodeqts {
-                if _,ok := relqts[i]; ok {
-                    relqts[i]=q
-                }
-            }
-            ss.Unlock()
-        }
-        
-        pr := make([]elements.FullRelation, 0, len(pendingRels))
-        fr := make(elements.ByElementId, 0, 8000)
-        rr := map[elements.Ref][]elements.Ref{}
-        rq := map[elements.Ref]quadtree.Quadtree{}
-        //for _,r := range pendingRels {
-        for r:= range iterObjs(pendingRels) {
-            hsr:=false
-            nq:=quadtree.Null
-            for i:=0; i < r.Len(); i++ {
-                switch r.MemberType(i) {
-                    case elements.Node:
-                        q,ok := relqts[r.Ref(i)]
-                        if ok && q!=quadtree.Null{
-                            nq = nq.Common(q)
-                        } 
-                    case elements.Way:
-                        q,ok := relqts[elements.Ref(1<<59) | r.Ref(i)]
-                        if ok && q!=quadtree.Null {
-                            nq = nq.Common(q)
-                        }
-                    case elements.Relation:
-                        hsr=true
-                        rr[r.Id()] = append(rr[r.Id()], r.Ref(i))
-                }
-            }
-            
-            if !hsr && nq == quadtree.Null {
-                fmt.Println("??",r,nq)
-                nq=0
-            }
-            r.SetQuadtree(nq)
-            rq[r.Id()]=nq
-            
-            
-            if !hsr {
-                fr=append(fr, r)
-            } else {
-                pr = append(pr, r)
-            }
-            if len(fr)>=8000 {
-                outchans[mxidx%nc] <- elements.MakeExtendedBlock(mxidx,fr,quadtree.Null,0,0,nil)
-                mxidx++
-                fr=make(elements.ByElementId,0,8000)
-            }
-            
-        }
-                
-        mxidx++
-        
-        for i:=0; i < 5; i++ {
-            
-                    
-            
-            for k,vv:=range rr {
-                switch k {
-                    case 20990, 21359, 63910, 72927, 177976, 371559, 2133091, 2147162, 2749877, 2763798, 4625716:
-                        println(i, k, rq[k].String(),len(vv))
-                }
-                
-                for _,v:=range vv {
-                    sq,ok := rq[v]
-                    if ok && sq !=quadtree.Null {
-                        rq[k] = rq[k].Common(sq)
-                        switch k {
-                            case 20990, 21359, 63910, 72927, 177976, 371559, 2133091, 2147162, 2749877, 2763798, 4625716:
-                                println(v,sq.String(), rq[k].String())
-                            
-                        }
-                    }
-                }
-            }
-        }
-        
-        
-        //fr = make(elements.ByElementId, 0, 8000)
-        
-        for _,r:=range pr {
-            q,ok:=rq[r.Id()]
-            if !ok || q==quadtree.Null {
-                q=0
-            }
-            r.SetQuadtree(q)
-            fr=append(fr,r)
-            if len(fr)>=8000 {
-                outchans[mxidx%nc] <- elements.MakeExtendedBlock(mxidx,fr,quadtree.Null,0,0,nil)
-                mxidx++
-                fr = make(elements.ByElementId, 0, 8000)
-            }
-        }
-        if len(fr)>0 {
-            outchans[mxidx%nc] <- elements.MakeExtendedBlock(mxidx,fr,quadtree.Null,0,0,nil)
-        }
-        for _,c:=range outchans {
-            close(c)
-        }
-    }()
-    return outchans
-}        
-        
-*/
-
+ 
 
 func recalcQts(inchan <-chan elements.ExtendedBlock, nc int, dropemptyrels bool, mm bool) []chan elements.ExtendedBlock {
     return relations(nodesAndWays(inchan, dropemptyrels), nc, mm)
@@ -759,7 +565,7 @@ func main() {
             panic(err.Error())
         }
         if *reCalcQts {
-            return recalcQts(readfile.CollectExtendedBlockChans(rr,false),len(rr),*dropemptyrels, true)
+            return recalcQts(readfile.CollectExtendedBlockChans(rr),len(rr),*dropemptyrels, true)
         }
         return rr
     }
@@ -895,12 +701,9 @@ func main() {
     if err!=nil {
         panic(err.Error())
     }
-        
-    //fmt.Println("sort and write to ",outfn)
-    //sorted := readfile.CollectExtendedBlockChans(outChans,false)
     
     st:=time.Now()
-    _,err = writefile.WritePbfFileM(outChans,outfn,false)
+    _,err = writefile.WritePbfFile(outChans,outfn,false)
     if err!=nil {
         panic(err.Error())
     }

@@ -654,14 +654,12 @@ func main() {
         if err!=nil {
             panic(err.Error())
         }
-        return readfile.CollectExtendedBlockChans(rr,false)
+        return readfile.CollectExtendedBlockChans(rr)
     }
     
     
     tagsFilter,err := geometry.ReadStyleFile(*stylefn)
     if err!=nil { panic(err.Error()) }
-    //fmt.Println(stylefn,tagsFilter)
-    
     
     geometries,err := geometry.GenerateGeometries(makeInChan, fbx, tagsFilter,*recalc,false)
     if err!=nil {

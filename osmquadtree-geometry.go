@@ -460,7 +460,8 @@ func geometryProgress(inc <-chan elements.ExtendedBlock, ii int) <-chan elements
     }()
     return geometries
 }
-    
+
+        
 
 func main() {
     runtime.GOMAXPROCS(runtime.NumCPU()*2)
@@ -543,11 +544,6 @@ func main() {
             panic("too many strings!")
         }
         
-        
-        /*for i,s:= range commonstrs {
-            commonvals[s] = int64(-1*i)
-        }*/
-        
     }
     
             
@@ -573,9 +569,6 @@ func main() {
                 qs[q]=true
                 ql=append(ql,q)
             }
-            
-            
-            
         }
         fmt.Printf("have %d qts\n", len(qs))
         passQt = readfile.MakePassQt(qs)
@@ -587,7 +580,7 @@ func main() {
         if err!=nil {
             panic(err.Error())
         }
-        return readfile.CollectExtendedBlockChans(rr,false)
+        return readfile.CollectExtendedBlockChans(rr)
     }
     
     
@@ -615,7 +608,7 @@ func main() {
     geometries,err := geometry.GenerateGeometries(makeInChan, fbx, tagsFilter, true, true)
     if err!=nil { panic(err.Error())}
     if *outFile != "" {
-        _,err = writefile.WritePbfFile(geometries, *outFile, true,false,false)
+        _,err = writefile.WritePbfFile(readfile.SplitExtendedBlockChans(geometries,4), *outFile, false)
         if err!=nil { panic(err.Error())}
         return;
     }

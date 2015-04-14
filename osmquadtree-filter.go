@@ -124,7 +124,7 @@ func process_filter(
     qq quadtree.QuadtreeSlice,
     locTest filter.LocTest,
     merge bool, trim bool, sort bool, idxed bool,
-    out io.Writer) (int64, error) {
+    out io.Writer) (int, int64, error) {
 
     passQt := func(q quadtree.Quadtree) bool { return true }
     
@@ -165,7 +165,7 @@ func process_filter(
             ids := filter.MakeIdSet(isBig)
             dd,err := readDataOrig()
             if err!=nil { return nil,err}
-            ddc := readfile.CollectExtendedBlockChans(dd,false)
+            ddc := readfile.CollectExtendedBlockChans(dd)
             err = filter.FindObjsFilter(ddc, locTest, ids)
             if err!=nil { return nil, err }
             dd,err = readDataOrig()
@@ -195,16 +195,14 @@ func process_filter(
     
     data,err := readData()
     if err!=nil {
-        return 0, err
+        return 0,0, err
     }
-    
-    dataCollected := readfile.CollectExtendedBlockChans(data,false)
     
     var tf io.ReadWriter
     if idxed {
         tmpf,err := ioutil.TempFile("","osmquadtree.writefile.tmp")
         if err!=nil {
-            return 0,err
+            return 0,0,err
         }
         
     
@@ -215,9 +213,13 @@ func process_filter(
         tf=tmpf
     }
     isc := len(chgfns)>0 && !(sort || merge)
-    //fmt.Printf("call writefile.WritePbfIndexed(dataCollected, %s, %s, %t, %t, %t)\n",out,tf,idxed,isc,sort)
-    _,err= writefile.WritePbfIndexed(dataCollected, out, tf, idxed, isc, sort)
-    return 0,err
+    
+    ii,err := writefile.WritePbfIndexed(data, out, tf, idxed, isc, sort)
+    tl:=int64(0)
+    for i:=0; i < ii.Len(); i++ {
+        tl+=ii.BlockLen(i)
+    }
+    return ii.Len(),tl,err
     
     
 }
@@ -391,12 +393,12 @@ func (fd *filterData) process_filter_serve(responseWriter http.ResponseWriter, r
         responseWriter.Header().Set("Content-Disposition", "attachment; filename=\""+fn+"\"")
                     
                 
-        ln,err := process_filter(
+        nb,ln,err := process_filter(
             fd.srcfn,fd.chgfns,fd.endDate,
             fd.qq, locTest, trim,merge,sort,!sort,responseWriter)
         
         if err!=nil {
-            fmt.Printf("returning %d bytes\n", ln)
+            fmt.Printf("returning %d bytes (from %d blocks)\n", ln, nb)
         }
         return err
         
@@ -511,9 +513,9 @@ func main() {
         outF,err := os.Create(*outfn)
         if err!=nil { panic(err.Error()) }
         
-        ln, err := process_filter(origfn,chgfns, endDate, qq, locTest, *merge, *trim, *sort, *idxed, outF)
+        nb, ln, err := process_filter(origfn,chgfns, endDate, qq, locTest, *merge, *trim, *sort, *idxed, outF)
         if err!=nil { panic(err.Error()) }
-        fmt.Printf("wrote %d bytes to %s\n", ln, outF.Name())
+        fmt.Printf("wrote %d bytes from %d blocks to %s\n", ln, nb, outF.Name())
         outF.Close()
     }
     

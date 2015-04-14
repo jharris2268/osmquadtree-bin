@@ -327,8 +327,8 @@ func main() {
 			}
 		} else {
             fmt.Println("updated",len(qts),"tiles")
-            //idx,err := writefile.WritePbfFile(blcks,o.outFile,true,true,false)
-            idx,err := writefile.WritePbfFileM(blcks,o.outFile,true)
+            
+            idx,err := writefile.WritePbfFile(blcks,o.outFile,true)
             
 			
 			if err != nil {
