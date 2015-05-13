@@ -25,7 +25,7 @@ import (
     
     "github.com/jharris2268/osmquadtree/locationscache"
     "github.com/jharris2268/osmquadtree/calcqts"
-    //"github.com/jharris2268/osmquadtree/blocksort"
+    "github.com/jharris2268/osmquadtree/filter"
     "github.com/jharris2268/osmquadtree/write"
     "github.com/jharris2268/osmquadtree/geojson"
     "github.com/jharris2268/osmquadtree/sqlselect"
@@ -48,32 +48,14 @@ import (
     "strconv"
     "net/http"
     "flag"
+    "sync"
 )
 
 var cleanQueryString *regexp.Regexp
 
 
 
-func readBbox(f string) *quadtree.Bbox {
-    if f=="planet" {
-        return quadtree.PlanetBbox()
-    }
-    t:=strings.Split(f,",")
-    if len(t)!=4 {
-        return quadtree.NullBbox()
-    }
-    
-    mx,_,err := utils.ParseStringInt(t[0])
-    if err!=nil { return quadtree.NullBbox() }
-    my,_,err := utils.ParseStringInt(t[1])
-    if err!=nil { return quadtree.NullBbox() }
-    Mx,_,err := utils.ParseStringInt(t[2])
-    if err!=nil { return quadtree.NullBbox() }
-    My,_,err := utils.ParseStringInt(t[3])
-    if err!=nil { return quadtree.NullBbox() }
-    return &quadtree.Bbox{mx,my,Mx,My}
-    
-}
+ 
 
 func hasTag(tags elements.Tags, k string) bool {
     if tags==nil {
@@ -192,10 +174,12 @@ type tablesQuery struct {
     mi int
     mx int
     xx int
+    
+    lock sync.Mutex
 }
 
 func newTablesQuery(pds packeddatastore.PackedDataStore, spec []tableSpec, queries map[int]tabQuPair) *tablesQuery {
-    return &tablesQuery{pds,spec,queries,make([]tabQuPair,0,16),map[int]tablesQueryResult{},-1,0,0}
+    return &tablesQuery{pds,spec,queries,make([]tabQuPair,0,16),map[int]tablesQueryResult{},-1,0,0,sync.Mutex{}}
 }
 
 func (tq *tablesQuery) tables(bb quadtree.Bbox) (map[string]sqlselect.Result,error) {
@@ -349,41 +333,51 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
             resptype=r.Form.Get("response")
         }
         
-        qq,ok := tq.queries[idx]
+        tq.lock.Lock()
         
-        if (ok && (query=="" || qq.text==query)) {
-            //pass
-        } else {
-            err = func() error {
+        block,err := func() (elements.ExtendedBlock, error) {
+            defer tq.lock.Unlock()
+        
+            qq,ok := tq.queries[idx]
             
-                for _,f:=range tq.queriesalt {
-                    if f.text==query {
-                        qq=f
-                        return nil
+            if (ok && (query=="" || qq.text==query)) {
+                //pass
+            } else {
+                err = func() error {
+                
+                    for _,f:=range tq.queriesalt {
+                        if f.text==query {
+                            qq=f
+                            return nil
+                        }
                     }
-                }
+                
+                    ff,err := sqlselect.Parse(query)
+                    if err!=nil { return nil }
+                    qq = tabQuPair{ff,query}
+                    fmt.Println("new query:",query)
+                    tq.queriesalt=append(tq.queriesalt, qq)
+                    return nil
+                }()
+                if err!=nil { return nil,err }
+            }
+            tq.xx++
+            return tq.result(tq.xx, idx, box, qq.query)
             
-                ff,err := sqlselect.Parse(query)
-                if err!=nil { return nil }
-                qq = tabQuPair{ff,query}
-                fmt.Println("new query:",query)
-                tq.queriesalt=append(tq.queriesalt, qq)
-                return nil
-            }()
-            if err!=nil { return nil }
+        }()
+        
+        if err!=nil {
+            return nil
         }
-        
-        block,err := tq.result(tq.xx, idx, box, qq.query)
-        
-        if err!=nil { return err }
-        
-        
 
 		switch resptype {
 		case "geojson":
 
 			w.Header().Set("Content-Type", "application/json")
-			bl := geojson.MakeFeatureCollection(block, reproj)
+			bl,err := geojson.MakeFeatureCollection(block, reproj)
+            if err!=nil {
+                panic(err.Error())
+            }
 			//fmt.Println("return json")
             tq.xx++
 			return json.NewEncoder(w).Encode(bl)
@@ -397,7 +391,7 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
 		//fmt.Printf("return pbf %d bytes\n", len(data))
 		w.Header().Set("Content-Type", "application/pbfg")
 		w.Write(data)
-        tq.xx++
+        
 		return nil
 
 	}()
@@ -471,7 +465,7 @@ func main() {
     
     prfx := flag.String("p","","prfx")
     endstr := flag.String("e","","enddate")
-    filter := flag.String("f","planet","filter")
+    filt   := flag.String("f","planet","filter")
     stylefn := flag.String("style","extrastyle.json","stylefn")
     queriesfn:= flag.String("queries",/*"/home/james/map_data/openstreetmap/openstreetmap-carto/project-pyds.mml"*/"","queriesfn")
     commonstrings:= flag.String("commonstrings","","common strings")
@@ -558,14 +552,17 @@ func main() {
     
     passQt := func(q quadtree.Quadtree) bool { return true }
     
-    fbx := quadtree.PlanetBbox()
-    if *filter!="" {
-        fbx = readBbox(*filter)
-        fmt.Println(fbx)
+    var locTest filter.LocTest
+    
+    if *filt!="" {
+        locTest = filter.MakeLocTest(*filt)
+        fmt.Println(locTest)
+        
         qs := map[quadtree.Quadtree]bool{}
         ql:=make([]quadtree.Quadtree,0,len(qq))
         for _,q:=range qq {
-            if q.Bounds(0.05).Intersects(*fbx) {
+            //if q.Bounds(0.05).Intersects(*fbx) {
+            if locTest.IntersectsQuadtree(q) {
                 qs[q]=true
                 ql=append(ql,q)
             }
@@ -605,12 +602,15 @@ func main() {
     dataStore := packeddatastore.MakePackedDataStore(commonstrs, qtAlloc,bs)
     
     
-    geometries,err := geometry.GenerateGeometries(makeInChan, fbx, tagsFilter, true, true)
+    fbx:=locTest.Bbox()
+    geometries,err := geometry.GenerateGeometries(makeInChan, &fbx, tagsFilter, true, true)
     if err!=nil { panic(err.Error())}
+    
+    
     if *outFile != "" {
         _,err = writefile.WritePbfFile(readfile.SplitExtendedBlockChans(geometries,4), *outFile, false)
         if err!=nil { panic(err.Error())}
-        return;
+        return
     }
     
     for b := range geometryProgress(geometries,1273) {
