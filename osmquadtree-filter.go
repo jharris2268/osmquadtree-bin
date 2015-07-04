@@ -459,6 +459,7 @@ func main() {
     } else {
         settings,err := locationscache.GetUpdateSettings(*prfx)
         if err!=nil {
+            
             panic(err.Error())
         }
         

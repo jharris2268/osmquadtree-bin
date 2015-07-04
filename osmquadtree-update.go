@@ -146,7 +146,11 @@ func makeDiffUrl(prfx string, state int64) string {
 }
 
 func makeStateFn(prfx string, state int64) string {
-	return fmt.Sprintf("%s%03d.osc.gz", prfx, state)
+    if state<1000 {
+        return fmt.Sprintf("%s%03d.osc.gz", prfx, state)
+    }
+    return fmt.Sprintf("%s%d.osc.gz", prfx, state)
+        
 }
 
 func getState(prfx string, state int64) (int64, elements.Timestamp, error) {

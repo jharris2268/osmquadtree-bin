@@ -238,7 +238,7 @@ func prepareCopyRow(specs map[string]copyPair, ele_in elements.Element) (string,
 	}
 	
     if !ele.IsValid() {
-        fmt.Println(ele.GeometryType(),ele.Id(),ele.AsWkt(true),"not a valid geometry")
+        fmt.Println(ele.GeometryType(),ele.Id() & 0xffffffffffff,ele.AsWkt(true),"not a valid geometry")
         return "",nil,nil
     }
     

@@ -32,6 +32,8 @@ import (
     "runtime/debug"
     "time"
     "flag"
+    
+    "runtime/pprof"
 )
 
 
@@ -85,6 +87,13 @@ func main() {
     target := flag.Int("target",8000,"target group size")
     minimum := flag.Int("minimum",4000,"minimum group size")
     
+    tfs := flag.String("tfs","tempfilesort","tfs")
+    sp := flag.Int("sp",20,"sp")
+    useAlt := flag.Bool("useAlt",false,"useAlt")
+    wbt := flag.Int("wbt", 2, "wbt")
+    
+    cpuprofile := flag.Bool("cpuprofile", false, "write cpu profile to file")
+
     flag.Parse()
     
     endstr := *eds
@@ -110,6 +119,18 @@ func main() {
         panic(err.Error())
     }
     
+    if *cpuprofile {
+        f, err := utils.MakeTempFile("cpuprofile")
+        if err != nil {
+            panic(err.Error())
+        }
+        fmt.Println("writing cpuprofile to ", f.Name())
+        pprof.StartCPUProfile(f)
+        defer pprof.StopCPUProfile()
+    }
+    
+    
+    
     filestr := endDate.FileString(endDate % (24*60*60) == 0)
         
     qtfn  := *prfx + filestr+"-qts.pbf"
@@ -123,7 +144,7 @@ func main() {
         
         st:=time.Now()
         
-        qq,err := calcqts.CalcObjectQts(*infn)
+        qq,err := calcqts.CalcObjectQts(*infn, *wbt, *tfs, uint(*sp), *useAlt)
         if err!=nil {
             panic(err.Error())
         }
