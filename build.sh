@@ -5,6 +5,8 @@ fi
 go run make_static.go
 
 echo "install in $GOBIN"
+#go clean github.com/jharris2268/osmquadtree
+#rm -R ${GOPATH}/pkg/linux_amd64/github.com/jharris2268/osmquadtree
 go install -a osmquadtree-prepare.go
 go install -a osmquadtree-initial.go
 go install -a osmquadtree-update.go
@@ -12,3 +14,4 @@ go install -a osmquadtree-geometry.go
 go install -a osmquadtree-filter.go static.go
 go install -a osmquadtree-postgis.go
 go install -a osmquadtree-rebase.go
+go install -a osmquadtree-geometry-features.go

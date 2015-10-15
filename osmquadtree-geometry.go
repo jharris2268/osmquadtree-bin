@@ -30,6 +30,7 @@ import (
     "github.com/jharris2268/osmquadtree/geojson"
     "github.com/jharris2268/osmquadtree/sqlselect"
     "github.com/jharris2268/osmquadtree/writefile"
+    "github.com/jharris2268/osmquadtree/blocksort"
     
     "github.com/jharris2268/osmquadtree/packeddatastore"
     
@@ -146,7 +147,49 @@ func readQueriesFn(mmlfn string) (map[int]tabQuPair,error) {
     return qq,nil
 }
 
-
+func readViewsFn(viewsFn string) ([]tableSpec, error) {
+    fmt.Println("readViewsFn",viewsFn)
+    fl,err :=os.Open(viewsFn)
+    if err!=nil {
+        return nil,err
+    }
+    viewsData := map[string]interface{}{}
+    err = json.NewDecoder(fl).Decode(&viewsData)
+    if err!=nil {
+        return nil,err
+    }
+    
+    result := make([]tableSpec, 0, len(viewsData))
+    for k,vv := range viewsData {
+        v:=vv.(map[string]interface{})
+        spec := tableSpec{}
+        spec.name = k
+        //vm := v.(map[string]string)
+        gt,ok := v["type"]
+        if ok {
+            gts,ok := gt.(string)
+            if !ok { return nil, errors.New(fmt.Sprintf("?? %q",gt))}
+            
+            switch gts {
+                case "POINT": spec.geomtype = geometry.Point
+                case "LINESTRING": spec.geomtype = geometry.Linestring
+                case "POLYGON": spec.geomtype = geometry.Polygon
+                case "GEOMETRYCOLLECTION": spec.geomtype = geometry.Multi
+            }
+        }
+        tab,ok := v["table"]
+        if !ok { return nil, errors.New("no table") }
+        tabs,ok := tab.(string)
+        if !ok { return nil, errors.New(fmt.Sprintf("table not a string?? %q",tab)) }
+        query,err := sqlselect.Parse(tabs)
+        if err!=nil { return nil,err}
+        spec.query=query
+        result=append(result,spec)
+        //spec.cols =query.Columns()
+    }
+    return result,nil
+}
+    
 
 
 type tableSpec struct {
@@ -158,6 +201,7 @@ type tableSpec struct {
 
 type tablesQueryResult struct {
     bbox   quadtree.Bbox
+    qt     quadtree.Quadtree
     tables map[string]sqlselect.Result
 }
 
@@ -188,8 +232,8 @@ func (tq *tablesQuery) tables(bb quadtree.Bbox) (map[string]sqlselect.Result,err
             return v.tables,nil
         }
     }
-    if len(tq.prev)>=3 {
-        for len(tq.prev)>=3 {
+    if len(tq.prev)>=1 {
+        for len(tq.prev)>=1 {
             delete(tq.prev,tq.mi)
             tq.mi++
         }
@@ -198,14 +242,14 @@ func (tq *tablesQuery) tables(bb quadtree.Bbox) (map[string]sqlselect.Result,err
     }
     
     
-    nr,err := make_tables(tq.pds,bb,tq.spec)
+    nr,err := make_tables(tq.pds,bb,quadtree.Null,tq.spec)
     
     
     if err!=nil {
         return nil,err
     }
     
-    tq.prev[tq.mx] = tablesQueryResult{bb,nr}
+    tq.prev[tq.mx] = tablesQueryResult{bb,quadtree.Null,nr}
     tq.mx++
     return nr,nil
 }
@@ -229,7 +273,48 @@ func asInt(ins string) int64 {
 func (tq *tablesQuery) result(idx int, qui int, bb quadtree.Bbox, qu sqlselect.Tabler) (elements.ExtendedBlock, error) {
     
     tabs,err := tq.tables(bb)
-    if err!=nil { return nil,err }
+    if err!=nil {
+        return nil,err
+    }
+        
+    return prep_result(tabs, idx,qui,qu,quadtree.Null,true)
+}
+
+func (tq *tablesQuery) rawtile(idx int, qui int, qt quadtree.Quadtree, qu sqlselect.Tabler) (elements.ExtendedBlock, error) {
+    nr,err := func() (map[string]sqlselect.Result, error) {
+    
+        for _,v:=range tq.prev {
+            if v.qt == qt {
+                return v.tables,nil
+            }
+        }
+        if len(tq.prev)>=3 {
+            for len(tq.prev)>=3 {
+                delete(tq.prev,tq.mi)
+                tq.mi++
+            }
+            debug.FreeOSMemory()
+            fmt.Println("have",len(tq.prev),tq.mi,tq.mx,utils.MemstatsStr())
+        }
+        
+        
+        nr,err := make_tables(tq.pds,quadtree.Bbox{}, qt,tq.spec)
+        
+        
+        if err!=nil {
+            return nil,err
+        }
+        
+        tq.prev[tq.mx] = tablesQueryResult{quadtree.Bbox{},qt,nr}
+        tq.mx++
+        return nr,nil
+    }()
+    if err!=nil { return nil,err}
+    return prep_result(nr,idx,qui,qu,qt,false)
+}
+
+func prep_result(tabs map[string]sqlselect.Result, idx int, qui int, qu sqlselect.Tabler, qt quadtree.Quadtree, addTags bool) (elements.ExtendedBlock, error) {
+    
     rr,err := qu.Result(tabs)
     if err!=nil { return nil,err }
     
@@ -247,7 +332,13 @@ func (tq *tablesQuery) result(idx int, qui int, bb quadtree.Bbox, qu sqlselect.T
         ts = strings.Join(kk, ";")
         //fmt.Println("tags=",ts)
     }
-    ble := elements.MakeExtendedBlock(idx,bl,quadtree.Null,0,0,elements.MakeTags([]string{"idx","query","tags"},[]string{fmt.Sprintf("%d",qui),qu.String(),ts}))
+    var tags elements.Tags
+    if addTags {
+        tags=elements.MakeTags([]string{"idx","query","tags"},[]string{fmt.Sprintf("%d",qui),qu.String(),ts})
+    } else {
+        tags=elements.MakeTags([]string{"query"},[]string{qu.String()})
+    }
+    ble := elements.MakeExtendedBlock(idx,bl,qt,0,0,tags)
     return ble,nil
 }
 
@@ -256,6 +347,38 @@ func cleanQuery(qu string) string {
     b := strings.TrimSpace(a)
     //return strings.ToLower(b)
     return b
+}
+
+
+func (tq *tablesQuery) tiles(w http.ResponseWriter, r *http.Request) {
+    err := func() error {
+        keys := tq.pds.Keys()
+        result := map[string]interface{} {}
+        
+        for _,k := range keys {
+            info := map[string]interface{} {}
+            info["qt"] = int64(k)
+            x,y,z := k.Tuple()
+            info["tuple"] = []int64{x,y,z}
+            
+            bx := k.Bounds(0.0)
+            info["bbox"] = []float64{
+                quadtree.ToFloat(bx.Minx),
+                quadtree.ToFloat(bx.Miny),
+                quadtree.ToFloat(bx.Maxx),
+                quadtree.ToFloat(bx.Maxy),
+            }
+            result[k.String()] = info
+        }
+        
+        w.Header().Set("Content-Type", "application/json")
+        
+        return json.NewEncoder(w).Encode(result)
+    }()
+    if err != nil {
+		fmt.Println(err.Error())
+		http.Error(w, err.Error(), 500)
+	}
 }
     
 func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
@@ -279,7 +402,7 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
         }
         
         box := quadtree.Bbox{}
-        
+        qt := quadtree.Null
         reproj:=true
         
         if r.Form.Get("minx")!="" {
@@ -319,8 +442,18 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
             qt,err:=quadtree.FromTuple(tx,ty,tz)
             if err!=nil { return err }
             box = qt.Bounds(0.0)
-            fmt.Println(tx,ty,tz,"=>",box)
+            //fmt.Println(tx,ty,tz,"=>",box)
+        } else if r.Form.Get("quadtree") != "" {
+            var err error
+            if r.Form.Get("quadtree")=="ZERO" {
+                qt = 0
+            } else {
+                qt,err = quadtree.FromString(r.Form.Get("quadtree"))
+            }
+            //fmt.Println(r.Form.Get("quadtree"),"=>",qt)
+            if err!=nil { return err }
         } else {
+        
             return errors.New("No bounds set")
         }
         
@@ -331,6 +464,11 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
         resptype := "geojson"
         if r.Form.Get("response")!="" {
             resptype=r.Form.Get("response")
+        }
+        
+        returnNull := false
+        if r.Form.Get("returnnull")!="" {
+            returnNull = (r.Form.Get("returnnull")=="true")
         }
         
         tq.lock.Lock()
@@ -362,11 +500,20 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
                 if err!=nil { return nil,err }
             }
             tq.xx++
+            if box.Empty() && qt != quadtree.Null {
+                //fmt.Println("pick tile??", qt)
+                //box=qt.Bounds(0)
+                return tq.rawtile(tq.xx,idx,qt,qq.query)
+                
+            }
             return tq.result(tq.xx, idx, box, qq.query)
             
         }()
         
         if err!=nil {
+            return nil
+        }
+        if (block.Len()==0) && returnNull {
             return nil
         }
 
@@ -402,7 +549,48 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func make_tables(pds packeddatastore.PackedDataStore, bb quadtree.Bbox, spec []tableSpec) (map[string]sqlselect.Result, error) {
+
+
+type deferedResult struct {
+    qu   sqlselect.Tabler
+    res  map[string]sqlselect.Result
+    done sqlselect.Result
+    //err  error
+}
+
+func (df *deferedResult) Len() int {
+    if df.done==nil {
+        var err error
+        df.done,err = df.qu.Result(df.res)
+        if err!=nil { fmt.Println(err) }
+    }
+    if df.done==nil { return 0 }
+    return df.done.Len()
+}
+
+func (df *deferedResult) Row(i int) sqlselect.Row {
+    if df.done==nil {
+        var err error
+        df.done,err = df.qu.Result(df.res)
+        if err!=nil { fmt.Println(err) }
+    }
+    if df.done==nil { return nil }
+    return df.done.Row(i)
+}
+func (df *deferedResult) Columns() []sqlselect.Rower {
+    if df.done==nil {
+        var err error
+        df.done,err = df.qu.Result(df.res)
+        if err!=nil { fmt.Println(err) }
+    }
+    if df.done==nil { return nil }
+    return df.done.Columns()
+}
+
+
+
+
+func make_tables(pds packeddatastore.PackedDataStore, bb quadtree.Bbox, qt quadtree.Quadtree, spec []tableSpec) (map[string]sqlselect.Result, error) {
     
     stt:=time.Now()
     res := map[string]sqlselect.Result{}
@@ -413,17 +601,32 @@ func make_tables(pds packeddatastore.PackedDataStore, bb quadtree.Bbox, spec []t
         return nil, errors.New(fmt.Sprintf("%s too big", bb))
     }
     
+    
+    
     for _,ss := range spec {
+        sc:=-1
+        for i,s:=range ss.cols {
+            if s == "osm_id" {
+                sc=i
+            }
+        }
+        
         if ss.cols != nil {
             //res[ss.name] = filterObjs(ts,bb,ss.geomtype,ss.cols)
-            res[ss.name] = pds.Filter(bb, ss.geomtype,ss.cols)
+            if qt!=quadtree.Null {
+                res[ss.name] = pds.FilterTile(qt, ss.geomtype, ss.cols,sc)
+            } else {
+                res[ss.name] = pds.Filter(bb, ss.geomtype, ss.cols,sc)
+            }
+            sl = append(sl, fmt.Sprintf("%s: %d rows",ss.name,res[ss.name].Len()))
         } else if ss.query != nil {
-            res[ss.name],err = ss.query.Result(res)
+            res[ss.name] = &deferedResult{ss.query, res, nil}
+            sl = append(sl, fmt.Sprintf("%s: defered",ss.name))
         }
         if err!=nil {
             return nil,err
         }
-        sl = append(sl, fmt.Sprintf("%s: %d rows",ss.name,res[ss.name].Len()))
+        //sl = append(sl, fmt.Sprintf("%s: %d rows",ss.name,res[ss.name].Len()))
     }
     
     fmt.Printf("bbox: %s => have %s: %4.1fs\n", bb, strings.Join(sl, "; "),time.Since(stt).Seconds())
@@ -471,7 +674,9 @@ func main() {
     commonstrings:= flag.String("commonstrings","","common strings")
     //stats := flag.Bool("stats", false, "show stats")
     outFile := flag.String("o", "", "output file")
-    
+    recalc := flag.Bool("recalc",false,"recalc qts")
+    sortBlocks := flag.Bool("sort",false,"sort")
+    viewsFn := flag.String("views","","viewsfn");
     
     flag.Parse()
     
@@ -603,12 +808,35 @@ func main() {
     
     
     fbx:=locTest.Bbox()
-    geometries,err := geometry.GenerateGeometries(makeInChan, &fbx, tagsFilter, true, true)
+    geometries,err := geometry.GenerateGeometries(makeInChan, &fbx, tagsFilter, *recalc, true)
     if err!=nil { panic(err.Error())}
     
     
     if *outFile != "" {
-        _,err = writefile.WritePbfFile(readfile.SplitExtendedBlockChans(geometries,4), *outFile, false)
+        outBlocks := readfile.SplitExtendedBlockChans(geometries,4)
+        if (*sortBlocks) {
+            alloc := func(e elements.Element) int {
+                qt:=e.(elements.Quadtreer).Quadtree()
+                gi:=qtt.Find(qt)
+                return qtm[gi]
+            }
+            
+            makeBlock := func(i int, a int, bl elements.Block) (elements.ExtendedBlock,error) {
+                qt := quadtree.Null
+                if a<0 || a>= len(qq) {
+                    fmt.Println("????", a, len(qq))
+                } else {
+                    qt = qq[a]
+                }
+                    
+                return elements.MakeExtendedBlock(i,bl,qt,0,0,nil),nil
+                
+            }
+            
+            outBlocks, err = blocksort.SortElementsByAlloc(outBlocks,alloc,4,makeBlock,"tempfilesplit")
+            if err!=nil { panic(err.Error())}
+        }
+        _,err = writefile.WritePbfFile(outBlocks, *outFile, false)
         if err!=nil { panic(err.Error())}
         return
     }
@@ -648,6 +876,11 @@ func main() {
     sort.Strings(lnc[4:])
     sort.Strings(pyc[5:])
 
+    
+    
+        
+
+
     spec := make([]tableSpec,4)
     spec[0] = tableSpec{"planet_osm_point",geometry.Point,ptc,nil}
     spec[1] = tableSpec{"planet_osm_line",geometry.Linestring,lnc,nil}
@@ -658,14 +891,21 @@ func main() {
     
     
     spec[3] = tableSpec{"planet_osm_roads",geometry.Linestring,nil, rdq}
-
-
-
+    
+    if *viewsFn != "" {
+        vspec,err := readViewsFn(*viewsFn)
+        if err!=nil {
+            panic(err.Error())
+        }
+        spec = append(spec, vspec...)
+    }
 
     tables := newTablesQuery(dataStore, spec, queries)
     
     
     http.HandleFunc("/query", tables.serve)
+    http.HandleFunc("/tiles", tables.tiles)
+    
     
     fmt.Println("Listening... on localhost:17831")
     panic(http.ListenAndServe(":17831", nil))

@@ -221,7 +221,10 @@ func main() {
         fmt.Printf("Find groups:  %8.1fs\n",t2)
         return 
     }
-    
+    if len(qts)<2 {
+        fmt.Println(qts)
+        panic("only 1 qt")
+    }
     qtt:=calcqts.MakeQtTree(qts)
     
     qtm:=map[quadtree.Quadtree]int{}

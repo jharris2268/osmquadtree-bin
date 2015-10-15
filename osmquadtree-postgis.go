@@ -359,20 +359,20 @@ func insertCopyBlock(outc chan<- queryPair, spec map[string]copyPair, block elem
 }
 
 var roads_stmt = `CREATE TABLE %s_roads AS
-    SELECT osm_id,name,ref,admin_level,highway,railway,boundary,
+    SELECT osm_id,quadtree,name,ref,admin_level,highway,railway,boundary,
             service,tunnel,bridge,z_order,covered, way
         FROM %s_line
         WHERE highway in (
             'secondary','secondary_link','primary','primary_link',
             'trunk','trunk_link','motorway','motorway_link')
         OR railway is not null or boundary = 'administrative'
-    UNION SELECT osm_id,name,null as ref,admin_level,null as highway, 
+    UNION SELECT osm_id,quadtree,name,null as ref,admin_level,null as highway, 
             null as railway, boundary, null as service,
             null as tunnel,null as bridge, 0  as z_order,null as covered,
             exteriorring(st_geometryn(way,generate_series(1,st_numgeometries(way)))) as way
         FROM %s_polygon WHERE
             osm_id<0 and boundary='administrative' and geometrytype(way)!='POLYGON'
-    UNION SELECT osm_id,name,null as ref, admin_level,null as highway,
+    UNION SELECT osm_id,quadtree,name,null as ref, admin_level,null as highway,
             null as railway, boundary, null as service,
             null as tunnel,null as bridge, 0  as z_order,null as covered,
             exteriorring(way) as way
