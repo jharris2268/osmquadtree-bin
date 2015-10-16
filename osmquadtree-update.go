@@ -201,12 +201,12 @@ func getState(srcprfx string, diffslocation string, state int64) (int64, element
 			fl += "."
 		}
 	}
-    fmt.Println("fetch state file", fl)
-	sn,ts,err := getStateFile(fl)
+    
+    sn,ts,err := getStateFile(fl)
     if err!=nil {
         return sn,ts,err
     }
-    fmt.Println("add to state.csv?", hasfile)
+    
     if hasfile {
         sf2,err :=os.OpenFile(sf.Name(), os.O_RDWR|os.O_APPEND, 0666)
         if err != nil {
@@ -214,7 +214,7 @@ func getState(srcprfx string, diffslocation string, state int64) (int64, element
         } else {
             ww := csv.NewWriter(sf2)
             nl := []string{fmt.Sprintf("%d",sn), ts.FileString(false)}
-            fmt.Println("append", nl)
+            
             ww.Write(nl)
             ww.Flush()
             //sf2.Flush()
