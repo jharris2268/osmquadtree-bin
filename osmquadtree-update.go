@@ -40,6 +40,7 @@ import (
     "strconv"
 	"strings"
     "time"
+    "encoding/csv"
 )
 
 func fetchDiff(dst, src string) (int64, float64, error) {
@@ -153,16 +154,74 @@ func makeStateFn(prfx string, state int64) string {
         
 }
 
-func getState(prfx string, state int64) (int64, elements.Timestamp, error) {
-	fl := prfx
+func getState(srcprfx string, diffslocation string, state int64) (int64, elements.Timestamp, error) {
+    sf,err := os.Open(diffslocation + "state.csv")
+    hasfile := false
+    if err!= nil {
+        //pass
+    } else {
+        defer sf.Close()
+        hasfile=true
+    } 
+    
+    if state>0 {
+        
+        
+        if hasfile {
+            //fmt.Println("have file")
+            
+            ff := csv.NewReader(sf)
+            for {
+                rec,err := ff.Read()
+                if err == io.EOF {
+                    break
+                }
+                if err != nil || len(rec) !=2 {
+                    log.Fatal(err)
+                }
+                //fmt.Println(rec)
+                sn, err := strconv.ParseInt(rec[0], 10, 64)
+                if err!=nil { log.Fatal(err) }
+                ts,err := time.Parse(`2006-01-02T15-04-05`, rec[1])
+                if err!=nil { log.Fatal(err) }
+                
+                if sn == state {
+                    
+                    return sn,elements.Timestamp(ts.Unix()),nil
+                }
+            }
+        }
+    }
+            
+    
+	fl := srcprfx
 	if state >= 0 {
-		fl = makeDiffUrl(prfx, state)
+		fl = makeDiffUrl(srcprfx, state)
 		if !strings.HasSuffix(fl, ".") {
 			fl += "."
 		}
 	}
-
-	return getStateFile(fl)
+    fmt.Println("fetch state file", fl)
+	sn,ts,err := getStateFile(fl)
+    if err!=nil {
+        return sn,ts,err
+    }
+    fmt.Println("add to state.csv?", hasfile)
+    if hasfile {
+        sf2,err :=os.OpenFile(sf.Name(), os.O_RDWR|os.O_APPEND, 0666)
+        if err != nil {
+            log.Println("??",err.Error())
+        } else {
+            ww := csv.NewWriter(sf2)
+            nl := []string{fmt.Sprintf("%d",sn), ts.FileString(false)}
+            fmt.Println("append", nl)
+            ww.Write(nl)
+            ww.Flush()
+            //sf2.Flush()
+            sf2.Close()
+        }
+    }
+    return sn,ts,err
 }
 
 const secondsInDay = elements.Timestamp(24 * 60 * 60)
@@ -249,7 +308,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		currentState, _, err := getState(settings.SourcePrfx, -1)
+		currentState, _, err := getState(settings.SourcePrfx, settings.DiffsLocation, -1)
 		if err != nil {
 			fmt.Println("getState", err.Error())
 			os.Exit(1)
@@ -283,7 +342,7 @@ func main() {
 				log.Printf("fetched %6.1f kb in %8.1fs\n", float64(ln)/1024.0, tt)
 
 			}
-			_, ts, err := getState(settings.SourcePrfx, state)
+			_, ts, err := getState(settings.SourcePrfx, settings.DiffsLocation, state)
 			if err != nil {
 				fmt.Println("getState", state, err.Error())
 				os.Exit(1)
