@@ -171,6 +171,7 @@ func getState(srcprfx string, diffslocation string, state int64) (int64, element
             //fmt.Println("have file")
             
             ff := csv.NewReader(sf)
+            var lr []string
             for {
                 rec,err := ff.Read()
                 if err == io.EOF {
@@ -189,7 +190,9 @@ func getState(srcprfx string, diffslocation string, state int64) (int64, element
                     
                     return sn,elements.Timestamp(ts.Unix()),nil
                 }
+                lr=rec
             }
+            fmt.Println("couldn't find",state,"lastrow",lr)
         }
     }
             
@@ -207,11 +210,12 @@ func getState(srcprfx string, diffslocation string, state int64) (int64, element
         return sn,ts,err
     }
     
-    if hasfile {
+    if state>0 && hasfile {
         sf2,err :=os.OpenFile(sf.Name(), os.O_RDWR|os.O_APPEND, 0666)
         if err != nil {
             log.Println("??",err.Error())
         } else {
+            fmt.Println(state,"ADD to",sf.Name(),sn,ts)
             ww := csv.NewWriter(sf2)
             nl := []string{fmt.Sprintf("%d",sn), ts.FileString(false)}
             
