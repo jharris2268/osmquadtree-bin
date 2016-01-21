@@ -123,7 +123,7 @@ func process_filter(
     srcfn string, chgfns []string, endDate elements.Timestamp,
     qq quadtree.QuadtreeSlice,
     locTest filter.LocTest,
-    merge bool, trim bool, sort bool, idxed bool,
+    merge bool, trim bool, sort bool, idxed bool, qttup bool,
     out io.Writer) (int, int64, error) {
 
     passQt := func(q quadtree.Quadtree) bool { return true }
@@ -214,7 +214,7 @@ func process_filter(
     }
     isc := len(chgfns)>0 && !(sort || merge)
     
-    ii,err := writefile.WritePbfIndexed(data, out, tf, idxed, isc, sort)
+    ii,err := writefile.WritePbfIndexed(data, out, tf, idxed, isc, sort, qttup)
     tl:=int64(0)
     for i:=0; i < ii.Len(); i++ {
         tl+=ii.BlockLen(i)
@@ -381,6 +381,7 @@ func (fd *filterData) process_filter_serve(responseWriter http.ResponseWriter, r
         trim := request.Form.Get("trim")=="true"
         merge := request.Form.Get("merge")=="true"
         sort := request.Form.Get("sort")=="true"
+        qttup:= request.Form.Get("quadtreetuple")=="true"
         fn := request.Form.Get("filename")
         
         responseWriter.Header().Set("Content-Type", "application/pbf")
@@ -395,7 +396,7 @@ func (fd *filterData) process_filter_serve(responseWriter http.ResponseWriter, r
                 
         nb,ln,err := process_filter(
             fd.srcfn,fd.chgfns,fd.endDate,
-            fd.qq, locTest, trim,merge,sort,!sort,responseWriter)
+            fd.qq, locTest, trim,merge,sort,!sort,qttup,responseWriter)
         
         if err!=nil {
             fmt.Printf("returning %d bytes (from %d blocks)\n", ln, nb)
@@ -426,6 +427,7 @@ func main() {
     outfn  := flag.String("o", "", "out filename")
     serve  := flag.Bool("s", false, "server")
     idxed  := flag.Bool("x", false, "indexed")
+    qttup  := flag.Bool("quadtreetuple", false, "write quadtrees as tuple")
     flag.Parse()
     
     if (*prfx)=="" {
@@ -514,7 +516,7 @@ func main() {
         outF,err := os.Create(*outfn)
         if err!=nil { panic(err.Error()) }
         
-        nb, ln, err := process_filter(origfn,chgfns, endDate, qq, locTest, *merge, *trim, *sort, *idxed, outF)
+        nb, ln, err := process_filter(origfn,chgfns, endDate, qq, locTest, *merge, *trim, *sort, *idxed, *qttup, outF)
         if err!=nil { panic(err.Error()) }
         fmt.Printf("wrote %d bytes from %d blocks to %s\n", ln, nb, outF.Name())
         outF.Close()

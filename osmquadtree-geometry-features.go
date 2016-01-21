@@ -1124,6 +1124,6 @@ func main() {
         outBlocks, err = blocksort.SortElementsByAlloc(outBlocks,alloc,4,makeBlock,"tempfilesplit")
         if err!=nil { panic(err.Error())}
     }
-    _,err = writefile.WritePbfFile(outBlocks, *outFile, false)
+    _,err = writefile.WritePbfFile(outBlocks, *outFile, false,true)
     if err!=nil { panic(err.Error())}
 }

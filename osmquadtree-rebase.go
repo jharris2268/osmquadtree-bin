@@ -40,6 +40,7 @@ import (
 
 
 func progress(inc chan elements.ExtendedBlock, ii int) chan elements.ExtendedBlock {
+    
     res := make(chan elements.ExtendedBlock)
     go func() {
         st:=time.Now()
@@ -47,12 +48,13 @@ func progress(inc chan elements.ExtendedBlock, ii int) chan elements.ExtendedBlo
         li := 0
         nn := 0
         var b elements.ExtendedBlock
+        
         for b = range inc {
             
             li += b.Len()
             if li > nn {
                 ll = fmt.Sprintf("%-8.1fs: %6d %0.100s %s", time.Since(st).Seconds(), b.Idx(), b, utils.MemstatsStr()) 
-                fmt.Println(ll)
+                fmt.Printf("\r%s",ll)
                 nn+=ii
             }
             res <- b
@@ -60,7 +62,7 @@ func progress(inc chan elements.ExtendedBlock, ii int) chan elements.ExtendedBlo
         }
         
         ll = fmt.Sprintf("%-8.1fs: %6d %0.100s %s", time.Since(st).Seconds(), b.Idx(), b, utils.MemstatsStr()) 
-        fmt.Printf(ll)
+        fmt.Printf("\r%s\n",ll)
         
         
         close(res)
@@ -471,7 +473,7 @@ func main() {
     
     outprfx :=flag.String("o","","new prefix")
     
-    reCalcQts     := flag.Bool("recalcqts", false, "only calc qts")
+    reCalcQts     := flag.Bool("recalcqts", false, "recalc qts")
     onlyCalcGroups  := flag.Bool("onlycalcgroups", false, "only calc groups")
     writeQtTree     := flag.Bool("writeqttree", false, "write qt tree to file")
     inMem           := flag.Bool("inmem", false, "sort objs in memory")
@@ -482,6 +484,7 @@ func main() {
     minimum := flag.Int("minimum",4000,"minimum group size")
     dropemptyrels := flag.Bool("dropemptyrels", false, "drop empty rels")
     
+    quadtreeTuple := flag.Bool("quadtreetupl",false,"write quadtree as tuple")
         
     flag.Parse()
     endDate:=elements.Timestamp(0)
@@ -525,12 +528,13 @@ func main() {
                 if j==0 {
                     continue
                 }
-                chgfns = append(chgfns,*prfx+i.Filename)
-                if endDate>0 && (i.Timestamp >= endDate) {
+                
+                if endDate>0 && (i.Timestamp > endDate) {
                     laststate = ii[j-1].State
                     endDate  = ii[j-1].Timestamp
                     break
                 }
+                chgfns = append(chgfns,*prfx+i.Filename)
             }
             if len(chgfns) > 0 {
                 fmt.Printf("origfn:%s, %d changes [%s=>%s]\n",origfn, len(chgfns), chgfns[0], chgfns[len(chgfns)-1])
@@ -556,7 +560,7 @@ func main() {
     outfn := filestr + ".pbf"
     
     
-    fmt.Println(int(endDate),(endDate%(24*60*60)),filestr)
+    fmt.Printf("endDate=%d, hh/mm/ss=%d,laststate=%d,filestr=%s\n",int(endDate),int(endDate%(24*60*60)),laststate,filestr)
     
     
     makeInChan := func(isf bool) []chan elements.ExtendedBlock {
@@ -577,7 +581,16 @@ func main() {
         
         //df,err := readfile.ReadQtsMulti(qtfn,4)
         //if err!=nil { panic(err.Error()) }
-        df := makeInChan(true)
+        dfn := makeInChan(true)
+        df := make([]chan elements.ExtendedBlock, len(dfn))
+        for i,d:=range dfn {
+            if i==0 {
+                df[i]=progress(d,137*8000/4)
+            } else {
+                df[i]=d
+            }
+        }
+        
         
         qtt := calcqts.FindQtTree(df, uint(*qtTreeMaxLevel))
         fmt.Printf("created qttree: %d items [%s]\n", qtt.Len(), utils.MemstatsStr())
@@ -703,7 +716,7 @@ func main() {
     }
     
     st:=time.Now()
-    _,err = writefile.WritePbfFile(outChans,outfn,false)
+    _,err = writefile.WritePbfFile(outChans,outfn,false,*quadtreeTuple)
     if err!=nil {
         panic(err.Error())
     }

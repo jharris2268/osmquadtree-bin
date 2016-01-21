@@ -531,7 +531,7 @@ func (tq *tablesQuery) serve(w http.ResponseWriter, r *http.Request) {
 		}
         
                 
-		data, err := write.WriteExtendedBlock(block, false, true)
+		data, err := write.WriteExtendedBlock(block, false, true, true)
 		if err != nil {
 			return err
 		}
@@ -836,7 +836,7 @@ func main() {
             outBlocks, err = blocksort.SortElementsByAlloc(outBlocks,alloc,4,makeBlock,"tempfilesplit")
             if err!=nil { panic(err.Error())}
         }
-        _,err = writefile.WritePbfFile(outBlocks, *outFile, false)
+        _,err = writefile.WritePbfFile(outBlocks, *outFile, false,true)
         if err!=nil { panic(err.Error())}
         return
     }

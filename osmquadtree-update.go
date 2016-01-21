@@ -379,7 +379,7 @@ func main() {
 		}
 
 		log.Printf("call CalcUpdateTiles(%q, %q, %d, %q, %d)", outputPrfx, o.srcFile, o.timestamp, zz, o.state)
-		blcks,qts, err := update.CalcUpdateTiles(outputPrfx, o.srcFile, o.timestamp, zz, o.state,settings.LocationsCache)
+		blcks,qts, err := update.CalcUpdateTiles(outputPrfx, o.srcFile, o.timestamp, zz, o.state,settings.LocationsCache, false, settings.IncludeUnchangedNodes)
 		if err != nil {
 			fmt.Println("CalcUpdateTiles", err.Error())
 			os.Exit(1)
@@ -395,7 +395,7 @@ func main() {
 		} else {
             fmt.Println("updated",len(qts),"tiles")
             
-            idx,err := writefile.WritePbfFile(blcks,o.outFile,true)
+            idx,err := writefile.WritePbfFile(blcks,o.outFile,true,settings.QuadtreeTuple)
             
 			
 			if err != nil {

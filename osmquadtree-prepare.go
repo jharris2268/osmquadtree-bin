@@ -82,6 +82,7 @@ func main() {
     writeQtTree     := flag.Bool("writeqttree", false, "write qt tree to file")
     inMem           := flag.Bool("inmem", false, "sort objs in memory")
     writeGroups     := flag.Bool("writegroups",false,"write quadtree groups to file")
+    quadtreeTuple   := flag.Bool("quadtreetuple", false, "write quadtrees as tuples")
 
     qtTreeMaxLevel    := flag.Int("qttreemaxlevel",17,"round qt values (default 17)")
     target := flag.Int("target",8000,"target group size")
@@ -149,7 +150,7 @@ func main() {
             panic(err.Error())
         }
         
-        err = writefile.WriteQts(qq,qtfn)
+        err = writefile.WriteQts(qq,qtfn,*quadtreeTuple)
 
         if err!=nil {
             panic(err.Error())
@@ -288,7 +289,7 @@ func main() {
     }
         
     st:=time.Now()
-    _,err = writefile.WritePbfFile(outChans,outfn,false)
+    _,err = writefile.WritePbfFile(outChans,outfn,false,*quadtreeTuple)
     if err!=nil {
         panic(err.Error())
     }

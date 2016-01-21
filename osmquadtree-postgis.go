@@ -52,9 +52,14 @@ func make_point_col(cols map[string]geometry.TagTest) []colType {
 	res = append(res, colType{"quadtree", "text"})
 	for k, v := range cols {
 		if v.IsNode {
-			res = append(res, colType{k, "text"})
-		}
-	}
+            switch v.Type {
+                case "text":
+                    res = append(res, colType{k, "text"})
+                case "json":
+                    res = append(res, colType{"other_tags", "jsonb"})
+            }
+        }
+    }
 	//res=append(res,colType{"parent_highway","text"})
 	return res
 }
@@ -65,9 +70,14 @@ func make_line_col(cols map[string]geometry.TagTest) []colType {
 	res = append(res, colType{"quadtree", "text"})
     
 	for k, v := range cols {
-		if v.IsWay && v.Type == "text" {
-			res = append(res, colType{k, "text"})
-		}
+		if v.IsWay {
+            switch v.Type {
+                case "text":
+                    res = append(res, colType{k, "text"})
+                case "json":
+                    res = append(res, colType{"other_tags", "jsonb"})
+            }  
+        }
 	}
 	
     if _,ok := cols["min_admin_level"]; ok {
@@ -77,7 +87,7 @@ func make_line_col(cols map[string]geometry.TagTest) []colType {
     if _,ok := cols["bus_routes"]; ok {
         res = append(res, colType{"bus_routes", "text"})
     }
-
+    
 	res = append(res, colType{"z_order", "integer"})
 	return res
 }
@@ -88,10 +98,16 @@ func make_polygon_col(cols map[string]geometry.TagTest) []colType {
 	res = append(res, colType{"quadtree", "text"})
 	for k, v := range cols {
 
-		if v.IsWay && v.Type == "text" {
-			res = append(res, colType{k, "text"})
-		}
+		if v.IsWay {
+            switch v.Type {
+                case "text":
+                    res = append(res, colType{k, "text"})
+                case "json":
+                    res = append(res, colType{"other_tags", "jsonb"})
+            }  
+        }
 	}
+    
 
 	res = append(res, colType{"z_order", "integer"})
 	res = append(res, colType{"way_area", "real"})
@@ -118,6 +134,7 @@ func exec_queries_list(db *sql.DB, queries []queryPair) error {
 			if !ok {
 				println("not a pq error", err.Error())
 			} else {
+                
 				fmt.Printf("%s %s %s %s\n", errp.Code, errp.Message, errp.Hint, errp.Position)
 			}
 			tx.Rollback()
@@ -171,6 +188,7 @@ func prepare(db *sql.DB, prfx string, cols map[string]geometry.TagTest) (map[str
 	stmts = append(stmts, queryPair{fmt.Sprintf("select AddGeometryColumn('%s_line', 'way', %d, 'LINESTRING', 2)", prfx, epsg), []interface{}{"add line way"}})
 	stmts = append(stmts, queryPair{fmt.Sprintf("select AddGeometryColumn('%s_polygon', 'way', %d, 'GEOMETRY', 2)", prfx, epsg), []interface{}{"add polygon way"}})
 
+    
 	err := exec_queries_list(db, stmts)
 
 	return map[string][]colType{"point": ptCol, "line": lnCol, "polygon": pyCol}, err
@@ -238,7 +256,7 @@ func prepareCopyRow(specs map[string]copyPair, ele_in elements.Element) (string,
 	}
 	
     if !ele.IsValid() {
-        fmt.Println(ele.GeometryType(),ele.Id() & 0xffffffffffff,ele.AsWkt(true),"not a valid geometry")
+        fmt.Printf("%8s %10d %.50s not a valid geometry\n",ele.GeometryType(),ele.Id(),ele.AsWkt(true))
         return "",nil,nil
     }
     
@@ -272,10 +290,13 @@ func prepareCopyRow(specs map[string]copyPair, ele_in elements.Element) (string,
 
 	for i := 0; i < ele.Tags().Len(); i++ {
 		k := ele.Tags().Key(i)
+        
 		ii, ok := sp[k]
 		if ok {
-			vals[ii] = ele.Tags().Value(i)
-		}
+            vals[ii] = ele.Tags().Value(i)
+            
+        }
+        
 	}
 
 	switch tab {
@@ -294,11 +315,31 @@ func prepareCopyRow(specs map[string]copyPair, ele_in elements.Element) (string,
     switch tab {
         case "polygon":
             ar,ok := ele.(interface{Area() float64})
+            if !ok {
+                fmt.Println("no Area() ???")
+                return "",nil,nil
+            }
+            area := ar.Area()
+            if area < 0 {
+                fmt.Println(ele, "area < 0")
+                return "", nil, nil
+            }
+            
             if ok {
                 vi,ok := sp["way_area"]
                 if ok {
                     vals[vi] = ar.Area()
                 }
+            }
+        case "line":
+            np,ok := ele.(interface{NumCoords() int})
+            if !ok {
+                fmt.Println("no NumCoords() ???")
+                return "",nil,nil
+            }
+            if np.NumCoords() < 2 {
+                fmt.Println(ele, "too short")
+                return "",nil,nil
             }
 	}
 	
@@ -308,12 +349,11 @@ func prepareCopyRow(specs map[string]copyPair, ele_in elements.Element) (string,
 		return "", nil, errors.New("wtf")
 	}
 	vals[ii] = fmt.Sprintf("SRID=%d;%s", epsg, ele.AsWkt(asMerc))
-	
-    if strings.Contains(vals[ii].(string), "Inf") {
-		println("skip", ele.Id(), vals[ii].(string))
-		return "", nil, nil
-	}
-	
+        if strings.Contains(vals[ii].(string), "Inf") {
+        fmt.Printf("skip %10d %.50s\n", ele.Id(), vals[ii].(string))
+        return "", nil, nil
+    }
+    
 
 	return tab, vals, nil
 }
@@ -360,7 +400,7 @@ func insertCopyBlock(outc chan<- queryPair, spec map[string]copyPair, block elem
 
 var roads_stmt = `CREATE TABLE %s_roads AS
     SELECT osm_id,quadtree,name,ref,admin_level,highway,railway,boundary,
-            service,tunnel,bridge,z_order,covered, way
+            service,tunnel,bridge,z_order,covered,surface, way
         FROM %s_line
         WHERE highway in (
             'secondary','secondary_link','primary','primary_link',
@@ -368,25 +408,31 @@ var roads_stmt = `CREATE TABLE %s_roads AS
         OR railway is not null or boundary = 'administrative'
     UNION SELECT osm_id,quadtree,name,null as ref,admin_level,null as highway, 
             null as railway, boundary, null as service,
-            null as tunnel,null as bridge, 0  as z_order,null as covered,
-            exteriorring(st_geometryn(way,generate_series(1,st_numgeometries(way)))) as way
+            null as tunnel,null as bridge, 0  as z_order,null as covered,null as surface,
+            st_exteriorring(st_geometryn(way,generate_series(1,st_numgeometries(way)))) as way
         FROM %s_polygon WHERE
-            osm_id<0 and boundary='administrative' and geometrytype(way)!='POLYGON'
+            osm_id<0 and boundary='administrative' and st_geometrytype(way)!='POLYGON'
     UNION SELECT osm_id,quadtree,name,null as ref, admin_level,null as highway,
             null as railway, boundary, null as service,
-            null as tunnel,null as bridge, 0  as z_order,null as covered,
-            exteriorring(way) as way
+            null as tunnel,null as bridge, 0  as z_order,null as covered,null as surface,
+            st_exteriorring(way) as way
         FROM %s_polygon WHERE
-            osm_id<0 and boundary='administrative' and geometrytype(way)='POLYGON'`
+            osm_id<0 and boundary='administrative' and st_geometrytype(way)='POLYGON'`
 
-func finish(db *sql.DB, prfx string) error {
+func finish(db *sql.DB, prfx string, has_other_tags string, skiproads bool) error {
 
-	stmts := make([]queryPair, 0, 10)
+	stmts := make([]queryPair, 0, 19)
 	println("call finish")
-	stmts = append(stmts, queryPair{fmt.Sprintf(roads_stmt, prfx, prfx, prfx, prfx), []interface{}{"create roads view"}})
     
-	
-	for _, p := range []string{"point", "line", "polygon", "roads"} {
+    cns := []string { "point", "line","polygon" }
+    
+    if !skiproads {
+        cns=append(cns,"roads")
+        stmts = append(stmts, queryPair{fmt.Sprintf(roads_stmt, prfx, prfx, prfx, prfx), []interface{}{"create roads view"}})
+    }
+    
+    
+	for _, p := range cns {
 
 	
 		q := fmt.Sprintf("create index %s_%s_pkey on %s_%s using btree ( osm_id )", prfx, p, prfx, p)
@@ -401,9 +447,9 @@ func finish(db *sql.DB, prfx string) error {
 	return exec_queries_list(db, stmts)
 }
 
-func InsertAll(dbname string, prfx string, cols map[string]geometry.TagTest, inc <-chan elements.ExtendedBlock, vac bool) error {
+func InsertAll(connstr string, prfx string, cols map[string]geometry.TagTest, inc <-chan elements.ExtendedBlock, vac bool, skiproads bool) error {
 
-	connstr := "host=/var/run/postgresql sslmode=disable dbname=" + dbname
+	
 	
 	db, err := sql.Open("postgres", connstr)
 	if err != nil {
@@ -423,6 +469,12 @@ func InsertAll(dbname string, prfx string, cols map[string]geometry.TagTest, inc
 	if err != nil {
 		return err
 	}
+    
+    has_other_tags := ""
+    ct,ok := cols["other_tags"]
+    if ok {
+        has_other_tags = ct.Type
+    }
 
 	err = func() error {
 		fix := func(cc *copyPair) {
@@ -490,12 +542,13 @@ func InsertAll(dbname string, prfx string, cols map[string]geometry.TagTest, inc
             _, err := copystmts[qp.stmt].stmt.Exec(qp.vals...)
         
             if err != nil {
-                fmt.Println(qp.stmt)
-                fmt.Println(qp.vals)
+                
+                fmt.Println("this", qp.stmt, qp.vals)
                 fmt.Println("copy statment exec", err.Error())
                 //return err
                 panic(err.Error())
             }
+            
         }
 		
 		return nil
@@ -504,13 +557,19 @@ func InsertAll(dbname string, prfx string, cols map[string]geometry.TagTest, inc
 		return nil
 	}
 	fmt.Printf("Insert: %8.1fs\n", time.Since(t1).Seconds())
-	err = finish(db, prfx)
+	err = finish(db, prfx, has_other_tags, skiproads)
 	if err != nil {
 		return nil
 	}
     if vac {
         ft := time.Now()
-        _, err = db.Exec("VACUUM ANALYZE")
+        tt := []string{"point","line","polygon"}
+        if !skiproads {
+            tt=append(tt, "roads")
+        }
+        for _,t:=range tt {
+            _, err = db.Exec(fmt.Sprintf("VACUUM FULL ANALYZE %s_%s", prfx, t))
+        }
         fmt.Printf("VACUUM ANALYZE: %8.1fs\n", time.Since(ft).Seconds())
     }
 	return err
@@ -572,9 +631,10 @@ func main() {
     stylefn :=flag.String("s","extrastyle.json","stylefn")
     recalc  :=flag.Bool("q",false,"recalc qts")
     
-    dbname  :=flag.String("d", "gis", "dbname")
+    connstr  :=flag.String("connstr", "host=/var/run/postgresql sslmode=disable dbname=gis", "database connection string")
     tablep  :=flag.String("t", "planet_osm", "table prefix")
     vac     :=flag.Bool("v", false, "call vacuum analyze")
+    skiproads:= flag.Bool("r",false, "skip roads table")
     
     flag.Parse()
     endDate:=elements.Timestamp(0)
@@ -617,7 +677,7 @@ func main() {
         if len(ii)>1 {
             for _,i := range ii[1:] {
                 chgfns = append(chgfns,*prfx+i.Filename)
-                if i.Timestamp >= endDate {
+                if endDate > 0 && i.Timestamp >= endDate {
                     break
                 }
             }
@@ -666,7 +726,7 @@ func main() {
         panic(err.Error())
     }
     
-    err = InsertAll(*dbname, *tablep, tagsFilter, geometryProgress(geometries,1273), *vac)
+    err = InsertAll(*connstr, *tablep, tagsFilter, geometryProgress(geometries,1273), *vac, *skiproads)
     if err!=nil {
         panic(err.Error())
     }

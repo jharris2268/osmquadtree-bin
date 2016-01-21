@@ -44,6 +44,7 @@ func main() {
 	diffsLocation := flag.String("diffslocation", "", "diffs location: where osc.gz files are saved")
 	roundTime     := flag.Bool("roundtime", false, "round timestamp up to nearest day")
     lctype        := flag.String("l", "pbf", "location cache type")
+    quadtreeTuple := flag.Bool("quadtreetuple", false, "write quadtrees as tuples")
     
     flag.Parse()
     
@@ -93,6 +94,7 @@ func main() {
     us.RoundTime = *roundTime
     
     us.LocationsCache = *lctype
+    us.QuadtreeTuple = *quadtreeTuple
     
     err = locationscache.WriteUpdateSettings(*prfx,us)
     if err!=nil { panic(err.Error()) }
